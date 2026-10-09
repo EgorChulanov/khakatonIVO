@@ -7,6 +7,8 @@ const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js
 
 const ROOT = path.resolve(__dirname, "..");
 const R = JSON.parse(fs.readFileSync(path.join(ROOT, "output/results.json"), "utf8"));
+const A = JSON.parse(fs.readFileSync(path.join(ROOT, "output/results_adv.json"), "utf8"));
+const AUTHOR = process.env.AUTHOR || "Егор Чуланов";
 const FIG = (f) => path.join(ROOT, "output/figures", f);
 const OUTFILE = path.join(ROOT, "output/IVO2026_aspiranty_dropout.pptx");
 
@@ -34,7 +36,7 @@ const W = 13.333;
 const M = 0.6;
 
 const pct = (v, d = 0) => `${(v * 100).toFixed(d)}%`;
-const SRC = "Данные: Всероссийский опрос аспирантов, 2021 (НИУ ВШЭ, HSE-BR-2025-009)";
+const SRC = "Данные: Всероссийский опрос аспирантов 2021 (HSE-BR-2025-009); Мониторинг эффективности вузов 2022 (Минобрнауки)";
 
 // ---------- Layouts ----------
 pres.defineSlideMaster({
@@ -53,7 +55,7 @@ pres.defineSlideMaster({
   objects: [
     { placeholder: { options: { name: "title", type: "title", x: M, y: 0.35, w: W - 2 * M, h: 0.95,
       fontSize: 26, bold: true, color: C.text2, valign: "top", align: "left", margin: 0 }, text: "" } },
-    { text: { text: SRC, options: { x: M, y: 7.0, w: 9, h: 0.3, fontSize: 10, color: C.text2,
+    { text: { text: SRC, options: { x: M, y: 7.0, w: 11, h: 0.3, fontSize: 10, color: C.text2,
       transparency: 30, margin: 0 } } },
   ],
   slideNumber: { x: W - M - 0.6, y: 7.0, w: 0.6, h: 0.3, fontSize: 10, color: C.text2, align: "right" },
@@ -103,100 +105,112 @@ const chartBase = () => ({
   showTitle: true, titleFontSize: 13, titleColor: HEX.ink, titleBold: true,
 });
 
+const num = (v) => Math.round(v).toLocaleString("ru-RU").replace(/ /g, " ");
+const pp = (v, d = 1) => `${v > 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(d)} п.п.`;
+const WORK_KEY = "C(work, Treatment('Не работает'))[T.ПД вне вуза]";
+
+function h3(s, text, x, y, w, color) {
+  s.addText(text, { x, y, w, h: 0.4, fontSize: 17, bold: true, color: color || C.text2, margin: 0, isTextBox: true });
+}
+function para(s, runs, x, y, w, h, size = 14, color) {
+  s.addText(runs, { x, y, w, h, fontSize: size, color: color || C.text1, margin: 0, valign: "top", isTextBox: true, paraSpaceAfter: 6 });
+}
+function bullets(s, items, x, y, w, h, size = 14, color) {
+  s.addText(items.map((t, j) => ({ text: t, options: { bullet: true, breakLine: j < items.length - 1 } })),
+    { x, y, w, h, fontSize: size, color: color || C.text1, margin: 0, paraSpaceAfter: 8, valign: "top", isTextBox: true });
+}
+function chip(s, x, y, w, label, fill) {
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h: 0.5, rectRadius: 0.25, fill: { color: fill }, line: { color: fill } });
+  s.addText(label, { x, y, w, h: 0.5, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true });
+}
+
 // ===== 1. Титул =====
 pres.addSection({ title: "Вступление" });
 let s = pres.addSlide({ masterName: "DARK", sectionTitle: "Вступление" });
-s.addText("Не работа, а среда: что толкает аспирантов к мысли об отчислении", { placeholder: "title" });
+s.addText("Не работа, а среда: кто и почему хочет бросить аспирантуру", { placeholder: "title" });
 s.addText([
-  { text: "Научный руководитель, академическая принадлежность и ментальное здоровье против внешней занятости", options: { breakLine: true } },
-  { text: "Хакатон исследователей высшего образования · Конференция ИВО 2026 · номинация «Анализ данных»", options: { fontSize: 14 } },
+  { text: "Связка двух массивов хакатона: опрос 5 007 аспирантов × Мониторинг эффективности вузов", options: { breakLine: true } },
+  { text: `${AUTHOR} · Хакатон исследователей высшего образования, Конференция ИВО 2026 · номинация «Анализ данных»`, options: { fontSize: 14 } },
 ], { placeholder: "body" });
-s.addNotes("Титульный слайд. Название команды и участников добавить перед отправкой.");
+s.addNotes("Главная мысль за 10 секунд: работа почти не связана с желанием уйти; решают руководитель, академическое сообщество и ментальное здоровье, а вузы с «конвейером защит» усиливают риск.");
 
-// ===== 2. Проблема и вопрос =====
+// ===== 2. Вопрос =====
 pres.addSection({ title: "Вопрос и данные" });
-s = content("Почему важно понять, кто хочет уйти из аспирантуры", "Вопрос и данные");
-card(s, M, 1.45, 5.6, 5.2);
-s.addText("Контекст", { x: M + 0.35, y: 1.65, w: 5, h: 0.4, fontSize: 18, bold: true, color: C.text2, margin: 0, isTextBox: true });
-s.addText([
-  { text: "Меньше 1 из 5 выпускников аспирантуры защищается в срок (ИСИЭЗ НИУ ВШЭ, Росстат)", options: { bullet: true, breakLine: true } },
-  { text: "Намерение уйти предшествует отчислению: это ранний сигнал, который вуз может заметить", options: { bullet: true, breakLine: true } },
-  { text: "Частое объяснение «аспиранты уходят, потому что работают». Мы проверяем, так ли это", options: { bullet: true } },
-], { x: M + 0.35, y: 2.15, w: 5.0, h: 3.4, fontSize: 15, color: C.text1, margin: 0, paraSpaceAfter: 10, valign: "top", isTextBox: true });
-
-s.addText("Исследовательский вопрос", { x: 6.75, y: 1.5, w: 6, h: 0.4, fontSize: 18, bold: true, color: C.text2, margin: 0, isTextBox: true });
-s.addText("Что сильнее связано с желанием бросить аспирантуру: внешняя нагрузка (работа, семья, финансы) или качество академической среды и научного руководства? И через что действует эта связь?",
-  { x: 6.75, y: 1.95, w: 6.0, h: 1.5, fontSize: 16, italic: true, color: C.text1, margin: 0, isTextBox: true, valign: "top" });
-const H = [
+s = content("Вопрос: что на самом деле толкает аспирантов к мысли об уходе", "Вопрос и данные");
+card(s, M, 1.45, 5.55, 5.25);
+h3(s, "Почему это важно", M + 0.3, 1.65, 5);
+bullets(s, [
+  "Меньше 1 из 5 выпускников аспирантуры защищается в срок (ИСИЭЗ НИУ ВШЭ, Росстат)",
+  "Намерение уйти опережает отчисление: это сигнал, который вуз может поймать заранее",
+  "Расхожее объяснение: «уходят, потому что работают». Политика часто строится на нём",
+  "Если оно неверно, вузы тратят ресурс не туда",
+], M + 0.3, 2.15, 5.0, 4.4, 15);
+h3(s, "Исследовательский вопрос", 6.55, 1.5, 6.2);
+para(s, "Что сильнее связано с желанием бросить аспирантуру: внешняя нагрузка или академическая среда, научное руководство и ментальное здоровье, и есть ли эффект самого вуза?",
+  6.55, 1.95, 6.2, 1.3, 16);
+const HY = [
   ["H1", "Полная занятость вне вуза повышает риск"],
-  ["H2", "Руководитель и среда снижают риск сильнее, чем работа повышает"],
-  ["H3", "Связь среды с намерением частично идёт через ментальное здоровье"],
-  ["H4", "Принадлежность к кафедре особенно защищает работающих"],
+  ["H2", "Руководитель и среда весят больше, чем работа"],
+  ["H3", "Часть эффекта среды идёт через ментальное здоровье"],
+  ["H4", "Принадлежность к кафедре защищает работающих"],
+  ["H5", "Характеристики вуза (МЭВ) меняют риск сверх индивидуальных"],
 ];
-H.forEach(([h, t], i) => {
-  const y = 3.6 + i * 0.75;
-  s.addShape(pres.shapes.OVAL, { x: 6.75, y, w: 0.55, h: 0.55, fill: { color: C.accent1 }, line: { color: C.accent1 } });
-  s.addText(h, { x: 6.75, y, w: 0.55, h: 0.55, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true });
-  s.addText(t, { x: 7.45, y, w: 5.3, h: 0.55, fontSize: 14, color: C.text1, valign: "middle", margin: 0, isTextBox: true });
+HY.forEach(([h, t], i) => {
+  const y = 3.4 + i * 0.66;
+  s.addShape(pres.shapes.OVAL, { x: 6.55, y, w: 0.5, h: 0.5, fill: { color: C.accent1 }, line: { color: C.accent1 } });
+  s.addText(h, { x: 6.55, y, w: 0.5, h: 0.5, fontSize: 12, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true });
+  s.addText(t, { x: 7.2, y, w: 5.55, h: 0.5, fontSize: 14, color: C.text1, valign: "middle", margin: 0, isTextBox: true });
 });
-s.addNotes("Зависимая переменная предложена организаторами: Q13_r3 «Я часто хочу бросить обучение в аспирантуре».");
 
 // ===== 3. Данные =====
-s = content("Данные: 5 007 аспирантов из 249 вузов", "Вопрос и данные");
-const stats = [
-  [R.n_total.toLocaleString("ru-RU").replace(/ /g, " "), "респондентов, онлайн-опрос, май–июль 2021"],
-  [String(R.n_unis), "вузов (используем для кластерных ошибок)"],
-  [pct(R.quit_share), "согласны: «Я часто хочу бросить аспирантуру»"],
-  [pct(R.phq_mod_share), "с умеренными и выше депрессивными симптомами (PHQ-8 ≥ 10)"],
+s = content("Данные: два массива хакатона, связанные на уровне вуза", "Вопрос и данные");
+const boxes = [
+  [M, "Опрос аспирантов, 2021", [`${num(R.n_total)} респондентов`, `${R.n_unis} вузов`, "намерение уйти, руководитель, среда, PHQ-8, работа"], C.accent1],
+  [4.75, "Мониторинг эффективности вузов", ["МЭВ-2022 (данные за 2021 год)", "698 головных вузов, 400+ показателей", "защиты НПР, аспиранты на 100 студентов, НИОКР, ЕГЭ"], C.accent5],
+  [8.9, "Связанный массив", [`${num(A.cl_n)} аспирантов`, `${A.cl_unis} вузов с показателями МЭВ`, "нечёткое сопоставление названий + ручная проверка"], C.accent2],
 ];
-stats.forEach(([b, l], i) => {
-  const x = M + i * 3.05;
-  card(s, x, 1.5, 2.8, 2.15);
-  stat(s, x + 0.25, 1.6, 2.4, b, l, i >= 2 ? C.accent2 : C.accent1);
+boxes.forEach(([x, t, items, col], i) => {
+  card(s, x, 1.5, 3.85, 2.75);
+  s.addShape(pres.shapes.OVAL, { x: x + 0.25, y: 1.7, w: 0.42, h: 0.42, fill: { color: col }, line: { color: col } });
+  s.addText(String(i + 1), { x: x + 0.25, y: 1.7, w: 0.42, h: 0.42, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true });
+  s.addText(t, { x: x + 0.8, y: 1.7, w: 2.9, h: 0.45, fontSize: 15, bold: true, color: C.text2, margin: 0, valign: "middle", isTextBox: true });
+  bullets(s, items, x + 0.25, 2.35, 3.4, 1.8, 13);
+  if (i < 2) s.addText(i === 0 ? "+" : "=", { x: x + 3.85, y: 2.55, w: 0.3, h: 0.5, fontSize: 26, bold: true, color: C.text2, align: "center", margin: 0, isTextBox: true });
 });
-s.addText("Ключевые переменные", { x: M, y: 4.0, w: 6, h: 0.4, fontSize: 18, bold: true, color: C.text2, margin: 0, isTextBox: true });
-const vars = [
-  ["Зависимая", "Q13_r3, шкала 1–4; бинарно «скорее/полностью согласен» (основная), порядковая (проверка)"],
-  ["Руководитель", "удовлетворённость взаимодействием (Q11), частота общения (Q50)"],
-  ["Академическая среда", `индекс принадлежности из 6 пунктов Qatm, α = ${R.alpha_belong.toFixed(2)}`],
-  ["Ментальное здоровье", `PHQ-8, 0–24 балла, α = ${R.alpha_phq.toFixed(2)}`],
-  ["Занятость", "5 типов (Q20) + связь работы с диссертацией (Q23)"],
-  ["Контроли", "пол, год и форма обучения, платное место, дети, брак, направление, регион, цели, публикации"],
+const st = [
+  [pct(R.quit_share), "согласны: «Я часто хочу бросить аспирантуру»", C.accent2],
+  [pct(R.phq_mod_share), "с умеренными и выше депрессивными симптомами (PHQ-8 ≥ 10)", C.accent2],
+  [`α = ${R.alpha_belong.toFixed(2)}`, "надёжность индекса академической принадлежности (6 пунктов)", C.accent1],
+  [`${pct(A.n / R.n_total)}`, "анкет с полными ответами для моделей", C.accent1],
 ];
-s.addTable(vars.map(([a, b]) => [
-  { text: a, options: { bold: true, color: C.text2 } }, { text: b, options: { color: C.text1 } },
-]), { x: M, y: 4.45, w: W - 2 * M, colW: [2.6, W - 2 * M - 2.6], fontSize: 13, rowH: 0.36,
-  border: { type: "solid", pt: 0.75, color: HEX.grid }, margin: [2, 6, 2, 6] });
+st.forEach(([b, l, col], i) => stat(s, M + i * 3.05, 4.55, 2.8, b, l, col));
 
 // ===== 4. Методы =====
 pres.addSection({ title: "Методы" });
-s = content("Методы: от описательных срезов к механизмам", "Методы");
-const steps = [
-  ["1", "Логит-регрессия", "4 вложенные модели, блоки предикторов, ошибки кластеризованы по вузу. Проверка: порядковый логит"],
-  ["2", "Важность блоков", "Декомпозиция Шепли псевдо-R² Макфаддена по 7 блокам (128 моделей)"],
-  ["3", "Медиация", "Руководитель / среда → PHQ-8 → намерение уйти. Бутстрэп 500 повторов, 95% ДИ"],
-  ["4", "Модерация", "Принадлежность × полная занятость вне вуза"],
+s = content("Методы: семь инструментов, каждый отвечает на свой вопрос", "Методы");
+const MT = [
+  ["Логит-регрессия", "кластерные ошибки по вузу; порядковый логит для проверки", "Что связано?"],
+  ["Декомпозиция Шепли", "вклад 7 блоков в псевдо-R² (128 моделей)", "Что важнее?"],
+  ["Градиентный бустинг", "5-fold CV AUC, перестановочная важность, нелинейности", "Предсказуемо ли?"],
+  ["Кластеризация k-means", "типы аспирантов по руководителю, среде, PHQ-8, интересу", "Кто в группе риска?"],
+  ["Медиация и модерация", "бутстрэп косвенного эффекта; принадлежность × работа", "Как действует?"],
+  ["Многоуровневая модель", "вузы как уровень 2 + показатели МЭВ", "Важен ли вуз?"],
+  ["G-computation", "контрфактические сценарии мер с бутстрэп-ДИ", "Что даст политика?"],
 ];
-steps.forEach(([n, h, t], i) => {
-  const x = M + i * 3.05;
-  card(s, x, 1.55, 2.8, 3.4);
-  s.addShape(pres.shapes.OVAL, { x: x + 0.25, y: 1.8, w: 0.7, h: 0.7, fill: { color: C.accent1 }, line: { color: C.accent1 } });
-  s.addText(n, { x: x + 0.25, y: 1.8, w: 0.7, h: 0.7, fontSize: 22, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true });
-  s.addText(h, { x: x + 0.25, y: 2.7, w: 2.35, h: 0.45, fontSize: 17, bold: true, color: C.text2, margin: 0, isTextBox: true });
-  s.addText(t, { x: x + 0.25, y: 3.2, w: 2.35, h: 1.6, fontSize: 14, color: C.text1, margin: 0, valign: "top", isTextBox: true });
+MT.forEach(([h, t, q], i) => {
+  const col = i % 2, row = Math.floor(i / 2);
+  const x = M + col * 6.15, y = 1.45 + row * 1.32;
+  const w = i === 6 ? W - 2 * M : 5.95;
+  card(s, x, y, w, 1.17);
+  s.addText(h, { x: x + 0.25, y: y + 0.13, w: 3.4, h: 0.4, fontSize: 15, bold: true, color: C.text2, margin: 0, isTextBox: true });
+  s.addText(t, { x: x + 0.25, y: y + 0.55, w: w - 2.3, h: 0.55, fontSize: 12, color: C.text1, margin: 0, valign: "top", isTextBox: true });
+  s.addText(q, { x: x + w - 2.0, y: y + 0.13, w: 1.8, h: 0.9, fontSize: 13, italic: true, bold: true, color: C.accent1, align: "right", valign: "middle", margin: 0, isTextBox: true });
 });
-card(s, M, 5.25, W - 2 * M, 1.45, { fill: C.background1 });
-s.addText([
-  { text: "Выборка для моделей: ", options: { bold: true } },
-  { text: `${R.n_model.toLocaleString("ru-RU").replace(/ /g, " ")} аспирантов с полными ответами (${pct(R.n_model / R.n_total)} от массива). ` },
-  { text: "Предсказательная проверка: ", options: { bold: true } },
-  { text: `5-кратная кросс-валидация, ROC AUC. Непрерывные предикторы стандартизованы (эффект на 1 SD). Python: statsmodels, scikit-learn; код воспроизводим.` },
-], { x: M + 0.1, y: 5.3, w: W - 2 * M - 0.2, h: 1.3, fontSize: 14, color: C.text1, margin: 0, valign: "middle", isTextBox: true });
 
 // ===== 5. Главный контраст =====
 pres.addSection({ title: "Результаты" });
 s = content("Работа почти не меняет риск, а руководитель, среда и здоровье меняют его в 4–6 раз", "Результаты");
-lead(s, `Доля согласных с «Я часто хочу бросить аспирантуру», среднее по выборке ${pct(R.quit_share)}. ПД = полный день`, 1.4);
+lead(s, `Доля согласных с «Я часто хочу бросить аспирантуру» (в среднем ${pct(R.quit_share)}). ПД = полный день`, 1.4);
 const panels = [
   ["Тип занятости", ["Не работает", "Подработки", "Неполный день", "ПД в своём вузе", "ПД вне вуза"],
     ["Нет", "Подраб.", "Неполн.", "ПД вуз", "ПД вне"], R.by_work, HEX.gray],
@@ -205,71 +219,71 @@ const panels = [
   ["Депр. симптомы PHQ-8", ["Минимальные", "Лёгкие", "Умеренные", "Выраженные"], ["0–4", "5–9", "10–14", "15+"], R.by_phq, HEX.orange],
 ];
 panels.forEach(([t, keys, labs, src, col], i) => {
-  const x = M + i * 3.05;
   s.addChart(pres.charts.BAR, [{ name: t, labels: labs, values: keys.map((k) => src[k].mean) }], {
-    ...chartBase(), x, y: 1.95, w: 2.95, h: 4.1, barDir: "col", title: t, chartColors: [col],
+    ...chartBase(), x: M + i * 3.05, y: 1.95, w: 2.95, h: 3.85, barDir: "col", title: t, chartColors: [col],
     valAxisMaxVal: 0.7, catAxisLabelFontSize: 10, catAxisLabelRotate: 0,
   });
 });
-s.addText([
-  { text: "Разброс по типу занятости: ", options: { bold: true } },
-  { text: "20–24%. По руководителю: 13–61%, по принадлежности: 10–55%, по PHQ-8: 9–52%." },
-], { x: M, y: 6.2, w: W - 2 * M, h: 0.5, fontSize: 15, color: C.text1, margin: 0, isTextBox: true });
+const wk = R.perceived.find((p) => p.key === "dif_work");
+card(s, M, 5.95, W - 2 * M, 0.85);
+para(s, [
+  { text: "Парадокс: ", options: { bold: true } },
+  { text: `${pct(wk.prev)} называют совмещение с работой серьёзной трудностью, но сам факт работы риск не меняет. Сопоставление по склонности (PSM, ${num(A.psm.n_matched)} пар): эффект полного дня вне вуза ${pp(A.psm.att)} [${(A.psm.ci[0] * 100).toFixed(1)}; ${(A.psm.ci[1] * 100).toFixed(1)}]. H1 отвергнута.` },
+], M + 0.25, 6.05, W - 2 * M - 0.5, 0.7, 14);
 
-// ===== 6. Воспринимаемое vs реальное =====
-s = content("Работу чаще всего называют трудностью, но сильнее «сигналят» тема и руководитель", "Результаты");
-const pf = [...R.perceived].sort((a, b) => b.rr - a.rr);
-const labs6 = pf.map((p) => p.label);
-s.addChart(pres.charts.BAR, [{ name: "Серьёзная трудность", labels: labs6, values: pf.map((p) => p.prev) }], {
-  ...chartBase(), x: M, y: 1.45, w: 6.2, h: 4.6, barDir: "bar", title: "Называют серьёзной трудностью, % аспирантов",
-  chartColors: [HEX.gray], catAxisOrientation: "maxMin", catAxisLabelFontSize: 12, valAxisMaxVal: 0.6,
-});
-s.addChart(pres.charts.BAR, [{ name: "Отн. риск", labels: labs6, values: pf.map((p) => +p.rr.toFixed(1)) }], {
-  ...chartBase(), x: 6.95, y: 1.45, w: 5.8, h: 4.6, barDir: "bar", title: "Во сколько раз чаще хотят бросить",
-  chartColors: [HEX.blue], catAxisOrientation: "maxMin", catAxisHidden: true, dataLabelFormatCode: '"×"0.0', valAxisMaxVal: 6,
-});
-const work = R.perceived.find((p) => p.key === "dif_work");
-const intr = R.perceived.find((p) => p.key === "dif_interest");
-s.addText([
-  { text: "Вывод: ", options: { bold: true } },
-  { text: `совмещение с работой отмечают ${pct(work.prev)}, но сам факт работы риск не повышает (слайд 5). Опасна не работа, а её восприятие как конфликта. Потеря интереса к теме встречается у ${pct(intr.prev)}, но среди них хотят уйти ${pct(intr.q1)}.` },
-], { x: M, y: 6.15, w: W - 2 * M, h: 0.75, fontSize: 14, color: C.text1, margin: 0, isTextBox: true, valign: "top" });
-
-// ===== 7. Регрессия =====
-s = content("При прочих равных: руководитель, среда и здоровье значимы, тип работы нет", "Результаты");
-s.addImage({ path: FIG("03_forest.png"), x: M, y: 1.4, w: 7.6, h: 7.6 * 1112 / 2300 });
-card(s, 8.55, 1.45, 4.2, 5.25);
-const OR = R.full_or;
-const ptsOR = [
-  ["×" + OR.phq.OR.toFixed(2), "шансы на +1 SD депрессивных симптомов", C.accent2],
-  ["×" + OR.belong.OR.toFixed(2), "шансы на +1 SD принадлежности к кафедре", C.accent1],
-  ["×" + OR.sup_sat.OR.toFixed(2), "шансы на +1 SD удовлетворённости руководителем", C.accent1],
-  ["×" + OR["C(work, Treatment('Не работает'))[T.ПД вне вуза]"].OR.toFixed(2), "полный день вне вуза, p = " + OR["C(work, Treatment('Не работает'))[T.ПД вне вуза]"].p.toFixed(2) + " (H1 не подтверждена)", C.text2],
-];
-ptsOR.forEach(([b, l, col], i) => {
-  const y = 1.6 + i * 1.25;
-  s.addText(b, { x: 8.8, y, w: 1.5, h: 0.6, fontSize: 26, bold: true, color: col, margin: 0, isTextBox: true, valign: "middle" });
-  s.addText(l, { x: 10.3, y, w: 2.3, h: 0.9, fontSize: 13, color: C.text1, margin: 0, isTextBox: true, valign: "top" });
-});
-s.addText(`Логит, N = ${R.n_model}, псевдо-R² = ${R.full_r2.toFixed(2)}. Порядковый логит даёт те же знаки и значимость.`,
-  { x: M, y: 6.35, w: 7.6, h: 0.4, fontSize: 12, color: C.text2, margin: 0, isTextBox: true });
-
-// ===== 8. Важность =====
-s = content("Три фактора среды объясняют две трети объяснённого, занятость менее 2%", "Результаты");
+// ===== 6. Что важнее =====
+s = content("Три фактора среды дают две трети объяснённого, занятость менее 2%", "Результаты");
 const sh = Object.entries(R.shapley).sort((a, b) => b[1].share - a[1].share);
 s.addChart(pres.charts.BAR, [{ name: "Доля", labels: sh.map((e) => e[0]), values: sh.map((e) => e[1].share) }], {
-  ...chartBase(), x: M, y: 1.45, w: 7.4, h: 5.2, barDir: "bar", title: "Вклад блока в псевдо-R² (декомпозиция Шепли)",
-  chartColors: [HEX.blue], catAxisOrientation: "maxMin", catAxisLabelFontSize: 13, valAxisMaxVal: 0.32,
+  ...chartBase(), x: M, y: 1.4, w: 6.3, h: 4.3, barDir: "bar", title: "Вклад блока в псевдо-R² (декомпозиция Шепли)",
+  chartColors: [HEX.blue], catAxisOrientation: "maxMin", catAxisLabelFontSize: 12, valAxisMaxVal: 0.32,
 });
-card(s, 8.4, 1.45, 4.35, 2.45);
-stat(s, 8.65, 1.55, 3.9, R.cv_auc_full.toFixed(2), "ROC AUC полной модели (5-fold CV)", C.accent1);
-card(s, 8.4, 4.2, 4.35, 2.45);
-stat(s, 8.65, 4.3, 3.9, R.cv_auc_external.toFixed(2), "AUC только по внешним факторам: соцдем, программа, занятость", C.text2);
-s.addNotes("Здоровье, среда и руководитель вместе дают около 67% объяснённой вариации; мотивация (интерес к теме, цель получить степень) около 22%.");
+const OR = R.full_or;
+const tiles = [
+  [`×${OR.phq.OR.toFixed(2)}`, "шансы на +1 SD депрессивных симптомов", C.accent2],
+  [`×${OR.belong.OR.toFixed(2)}`, "на +1 SD принадлежности к кафедре", C.accent1],
+  [`×${OR.sup_sat.OR.toFixed(2)}`, "на +1 SD удовлетворённости руководителем", C.accent1],
+  [`×${OR[WORK_KEY].OR.toFixed(2)}`, `полный день вне вуза, p = ${OR[WORK_KEY].p.toFixed(2)}`, C.text2],
+];
+tiles.forEach(([b, l, col], i) => {
+  const x = 7.2 + (i % 2) * 2.8, y = 1.45 + Math.floor(i / 2) * 2.0;
+  card(s, x, y, 2.6, 1.8);
+  s.addText(b, { x: x + 0.2, y: y + 0.15, w: 2.2, h: 0.7, fontSize: 30, bold: true, color: col, margin: 0, isTextBox: true });
+  s.addText(l, { x: x + 0.2, y: y + 0.9, w: 2.25, h: 0.8, fontSize: 12, color: C.text1, margin: 0, valign: "top", isTextBox: true });
+});
+para(s, [
+  { text: "Предсказательная сила: ", options: { bold: true } },
+  { text: `логит AUC ${A.auc_lr.toFixed(2)}, бустинг ${A.auc_gb.toFixed(2)} (5-fold CV) против ${R.cv_auc_external.toFixed(2)} только на внешних факторах. ` },
+  { text: "Скрининг: ", options: { bold: true } },
+  { text: `20% аспирантов с наибольшим риском покрывают ${pct(A.screen_top20_capture)} всех, кто хочет уйти. ` },
+  { text: "Устойчивость: ", options: { bold: true } },
+  { text: `E-value для PHQ-8 ${A.evalue.phq.toFixed(1)}, для принадлежности ${A.evalue.belong.toFixed(1)}: скрытый конфаундер должен быть сильным, чтобы обнулить связь.` },
+], M, 5.85, W - 2 * M, 1.0, 13);
 
-// ===== 9. Механизмы =====
+// ===== 7. Профили =====
+s = content("Четыре типа аспирантов: риск различается в 11 раз, а доля работающих почти одинакова", "Результаты");
+s.addImage({ path: FIG("08_profiles.png"), x: M, y: 1.4, w: 7.2, h: 7.2 * 0.6 });
+const PR = A.profiles;
+const pcol = ["1BAF7A", HEX.blue, "4A3AA7", HEX.orange];
+const pdesc = [
+  "довольны руководителем, свои на кафедре, симптомов почти нет",
+  "руководитель в порядке, но нет чувства принадлежности",
+  "хорошая среда, но выраженные депрессивные симптомы",
+  "конфликт или отсутствие поддержки руководителя, слабая среда",
+];
+PR.forEach((p, i) => {
+  const y = 1.45 + i * 1.32;
+  card(s, 8.1, y, 4.65, 1.17);
+  s.addShape(pres.shapes.OVAL, { x: 8.3, y: y + 0.3, w: 0.55, h: 0.55, fill: { color: pcol[i] }, line: { color: pcol[i] } });
+  s.addText(`${p.name} · ${pct(p.share)}`, { x: 9.05, y: y + 0.1, w: 3.6, h: 0.35, fontSize: 14, bold: true, color: C.text2, margin: 0, isTextBox: true });
+  s.addText(`${pdesc[i]}. Хотят уйти ${pct(p.quit)}, работают ПД вне вуза ${pct(p.ft_out)}`, { x: 9.05, y: y + 0.45, w: 3.6, h: 0.7, fontSize: 11, color: C.text1, margin: 0, valign: "top", isTextBox: true });
+});
+para(s, "Кластеризация k-means по 4 стандартизованным признакам. Размер пузыря = доля аспирантов, число внутри = доля желающих уйти.",
+  M, 5.95, 7.2, 0.6, 12, C.text2);
+
+// ===== 8. Механизмы =====
 s = content("Механизмы: часть эффекта идёт через здоровье, а принадлежность защищает работающих", "Результаты");
-s.addText("Медиация через PHQ-8 (LPM, бутстрэп)", { x: M, y: 1.45, w: 6.2, h: 0.4, fontSize: 15, bold: true, color: C.text2, margin: 0, isTextBox: true });
+h3(s, "Медиация через PHQ-8 (бутстрэп)", M, 1.45, 6.2);
 const med = R.mediation;
 const box = (x, y, w, t, fill) => {
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h: 0.8, rectRadius: 0.08, fill: { color: fill }, line: { color: fill } });
@@ -283,50 +297,69 @@ s.addShape(pres.shapes.LINE, { x: 4.55, y: 2.4, w: 1.15, h: 0.95, line: { color:
 s.addShape(pres.shapes.LINE, { x: 2.6, y: 3.75, w: 2.15, h: 0, line: { color: HEX.ink2, width: 1.5, endArrowType: "triangle" } });
 s.addText("прямой эффект", { x: 2.75, y: 3.8, w: 1.9, h: 0.3, fontSize: 11, color: C.text2, align: "center", margin: 0, isTextBox: true });
 s.addTable([
-  [{ text: "", options: {} }, { text: "Руководитель", options: { bold: true } }, { text: "Принадлежность", options: { bold: true } }],
+  [{ text: "" }, { text: "Руководитель", options: { bold: true } }, { text: "Принадлежность", options: { bold: true } }],
   ["Общий эффект, п.п. на 1 SD", (med.sup_sat.total * 100).toFixed(1), (med.belong.total * 100).toFixed(1)],
   ["Косвенный через PHQ-8", (med.sup_sat.indirect * 100).toFixed(1), (med.belong.indirect * 100).toFixed(1)],
   ["95% ДИ косвенного", med.sup_sat.ci.map((v) => (v * 100).toFixed(1)).join("…"), med.belong.ci.map((v) => (v * 100).toFixed(1)).join("…")],
   ["Доля медиации", pct(med.sup_sat.prop), pct(med.belong.prop)],
 ], { x: M, y: 4.55, w: 6.1, colW: [2.7, 1.6, 1.8], fontSize: 13, color: HEX.ink, rowH: 0.36,
   border: { type: "solid", pt: 0.75, color: HEX.grid }, margin: [2, 6, 2, 6] });
-s.addText("Модерация: принадлежность × полный день вне вуза", { x: 7.0, y: 1.45, w: 5.8, h: 0.4, fontSize: 15, bold: true, color: C.text2, margin: 0, isTextBox: true });
+h3(s, "Модерация: принадлежность × работа", 7.0, 1.45, 5.8);
 s.addImage({ path: FIG("05_interaction.png"), x: 7.0, y: 1.9, w: 5.75, h: 5.75 * 1035 / 1660 });
-s.addText(`Взаимодействие β = ${R.interaction.coef.toFixed(2)}, p = ${R.interaction.p.toFixed(3)}: при слабой принадлежности работающие полный день вне вуза в зоне наибольшего риска (H4).`,
-  { x: 7.0, y: 5.6, w: 5.75, h: 1.1, fontSize: 13, color: C.text1, margin: 0, isTextBox: true, valign: "top" });
+para(s, `β = ${R.interaction.coef.toFixed(2)}, p = ${R.interaction.p.toFixed(3)}: работа опасна только без академической опоры. При высокой принадлежности работающие по модели рискуют даже меньше.`,
+  7.0, 5.6, 5.75, 1.1, 13);
 
-// ===== 10. Выводы =====
+// ===== 9. Вуз =====
+s = content("Вуз тоже важен: в «конвейерах защит» аспиранты чаще хотят уйти", "Результаты");
+s.addImage({ path: FIG("06_universities.png"), x: M, y: 1.45, w: 6.6, h: 6.6 * 0.485 });
+para(s, `Оценки многоуровневой модели для ${A.uni_range.k} вузов с 30+ ответами, обезличено.`, M, 4.7, 6.6, 0.35, 12, C.text2);
+[[`${pct(A.uni_range.min)}–${pct(A.uni_range.max)}`, "разброс доли «хочу бросить» между вузами"],
+ [pct(A.icc.null, 1), "дисперсии на уровне вуза (ICC): главное внутри вуза"],
+ [A.mor.null.toFixed(2), "медианное отношение шансов между вузами"]].forEach(([b, l], i) => {
+  const x = M + i * 2.25;
+  s.addText(b, { x, y: 5.15, w: 2.1, h: 0.6, fontSize: 26, bold: true, color: i === 0 ? C.accent2 : C.accent1, margin: 0, isTextBox: true });
+  s.addText(l, { x, y: 5.8, w: 2.05, h: 0.8, fontSize: 12, color: C.text1, margin: 0, valign: "top", isTextBox: true });
+});
+const cxl = A.cross_level;
+const LBL = { staff_defended: "Доля НПР, защитивших диссертации за год", phd_per100: "Аспиранты на 100 студентов", ege: "Средний балл ЕГЭ", income_per_student: "Доходы на 1 студента", grants_per100: "Гранты на 100 НПР", rd_share: "Доля доходов от НИОКР" };
+const order = ["staff_defended", "phd_per100", "ege", "income_per_student", "grants_per100", "rd_share"];
+s.addTable([
+  [{ text: "Показатель МЭВ (+1 SD)", options: { bold: true } }, { text: "ОШ", options: { bold: true } }, { text: "p", options: { bold: true } }],
+  ...order.map((k) => [LBL[k], { text: cxl[k].OR.toFixed(2), options: { bold: cxl[k].p < 0.05, color: cxl[k].p < 0.05 ? HEX.orange : HEX.ink } }, cxl[k].p < 0.001 ? "<0.001" : cxl[k].p.toFixed(3)]),
+], { x: 7.55, y: 1.45, w: 5.2, colW: [3.5, 0.8, 0.9], fontSize: 12, color: HEX.ink, rowH: 0.36,
+  border: { type: "solid", pt: 0.75, color: HEX.grid }, margin: [2, 6, 2, 6] });
+card(s, 7.55, 4.2, 5.2, 2.55);
+para(s, [
+  { text: "H5 подтверждена частично. ", options: { bold: true } },
+  { text: `Там, где за год защищается больше сотрудников, шансы хотеть уйти выше на ${((cxl.staff_defended.OR - 1) * 100).toFixed(0)}% при равных индивидуальных факторах (устойчиво без двух крупнейших вузов). Поддержка руководителя там важнее: взаимодействие β = ${A.cross_inter.coef.toFixed(2)}, p = ${A.cross_inter.p.toFixed(2)}. ` },
+  { text: "Вероятная причина: давление «защищайся быстрее» без ресурсов." , options: { italic: true } },
+], 7.75, 4.35, 4.85, 2.3, 13);
+
+// ===== 10. Что делать =====
 pres.addSection({ title: "Выводы" });
 s = pres.addSlide({ masterName: "DARKCONTENT", sectionTitle: "Выводы" });
-s.addText("Выводы и что может сделать вуз", { placeholder: "title" });
-const concl = [
-  ["Что нашли", [
-    "H1 нет: тип занятости не связан с намерением уйти",
-    "H2 да: руководитель, среда и здоровье дают ~2/3 объяснённого",
-    `H3 частично: ${pct(med.belong.prop)} эффекта среды идёт через здоровье`,
-    "H4 да: принадлежность сильнее защищает работающих",
-  ]],
-  ["Что делать вузу", [
-    "Скрининг благополучия (PHQ-8) на ежегодной аттестации",
-    "Стандарт: встреча с руководителем не реже 2 раз в месяц",
-    "Аспирантские семинары и сообщество, особенно для работающих",
-    "Не ограничивать работу, а связывать её с темой диссертации",
-  ]],
-  ["Ограничения", [
-    "Кросс-секционные данные: связи, не причинность",
-    "Намерение, а не факт отчисления",
-    "Самоотбор в онлайн-опросе, весна 2021 (пандемия)",
-    "Дальше: связать с данными МЭВ по выпуску аспирантов",
-  ]],
-];
-concl.forEach(([h, items], i) => {
-  const x = M + i * 4.1;
-  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 1.5, w: 3.85, h: 4.85, rectRadius: 0.08, fill: { color: "22335A" }, line: { color: "22335A" } });
-  s.addText(h, { x: x + 0.3, y: 1.7, w: 3.3, h: 0.45, fontSize: 19, bold: true, color: i === 1 ? C.accent2 : C.background1, margin: 0, isTextBox: true });
-  s.addText(items.map((t, j) => ({ text: t, options: { bullet: true, breakLine: j < items.length - 1 } })),
-    { x: x + 0.3, y: 2.3, w: 3.3, h: 3.9, fontSize: 14, color: C.background1, margin: 0, paraSpaceAfter: 10, valign: "top", isTextBox: true });
+s.addText("Что даст вузу каждая мера: симуляция на модели", { placeholder: "title" });
+const sims = Object.entries(A.sim).sort((a, b) => a[1].delta - b[1].delta);
+s.addChart(pres.charts.BAR, [{ name: "Δ", labels: sims.map((e) => e[0]), values: sims.map((e) => +(Math.abs(e[1].delta) * 100).toFixed(1)) }], {
+  ...chartBase(), x: M, y: 1.35, w: 7.4, h: 4.3, barDir: "bar",
+  title: `Снижение доли «хочу бросить», п.п. (база ${pct(A.sim_base)})`, titleColor: "FFFFFF",
+  chartColors: [HEX.orange], catAxisOrientation: "maxMin", catAxisLabelFontSize: 11, catAxisLabelColor: "FFFFFF",
+  dataLabelColor: "FFFFFF", dataLabelFormatCode: "0.0", valAxisMaxVal: 9, catAxisLineColor: "52627F",
 });
-s.addText("Исследование осуществлено с использованием данных Программы фундаментальных исследований НИУ ВШЭ (HSE-BR-2025-009). Контекст о защитах: ИСИЭЗ НИУ ВШЭ.",
+s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 8.25, y: 1.35, w: 4.5, h: 4.3, rectRadius: 0.08, fill: { color: "22335A" }, line: { color: "22335A" } });
+h3(s, "Рекомендации", 8.5, 1.55, 4.0, C.accent2);
+bullets(s, [
+  "Ежегодный скрининг PHQ-8 и путь к психологу",
+  "Стандарт: встреча с руководителем ≥ 2 раз в месяц",
+  "Аспирантские семинары и сообщество кафедры",
+  "Ранний сигнал: короткая анкета находит 20% группы риска",
+  "Не запрещать работу: это не помогает",
+], 8.5, 2.05, 4.05, 3.5, 14, C.background1);
+s.addText([
+  { text: "Ограничения: ", options: { bold: true } },
+  { text: "кросс-секционные данные (связи, не причинность), намерение вместо факта отчисления, онлайн-опрос весны 2021 года. Далее: лонгитюд и данные о фактических отчислениях." },
+], { x: M, y: 5.85, w: W - 2 * M, h: 0.6, fontSize: 12, color: C.background1, margin: 0, isTextBox: true, valign: "top" });
+s.addText("Исследование осуществлено в рамках Программы фундаментальных исследований НИУ ВШЭ (HSE-BR-2025-009). Авторы благодарят лабораторию «Развитие университетов» ИО НИУ ВШЭ за сводную базу МЭВ.",
   { x: M, y: 6.55, w: W - 2 * M - 1, h: 0.4, fontSize: 10, color: C.background2, margin: 0, isTextBox: true });
 
 (async () => {

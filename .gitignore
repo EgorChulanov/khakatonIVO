@@ -4,3 +4,4 @@ data/
 *.xlsx
 *.zip
 __pycache__/
+output/_*
