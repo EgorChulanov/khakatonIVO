@@ -1,0 +1,7 @@
+# Hackathon microdata must never be committed (data-use terms forbid sharing)
+data/
+*.sav
+*.xlsx
+*.zip
+__pycache__/
+output/_*
